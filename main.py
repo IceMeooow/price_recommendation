@@ -1,10 +1,8 @@
-from forecaster import Forecaster
+from price_advisor import Advisor
 
+obj = Advisor('dunnhumby _Breakfast-at-the-Frat/dunnhumby - Breakfast at the Frat.xlsx')
+summary_dict = obj.recommend_price()
+print(summary_dict)
 
-forecaster = Forecaster('dunnhumby _Breakfast-at-the-Frat/dunnhumby - Breakfast at the Frat.xlsx')
-df = forecaster.create_data()
-
-df = forecaster.fill_nan_in_price(df)
-
-price = forecaster.recommend_price(df)
-print("Recommended price(s) for next %s week(s) : %s"%(len(price), price.flatten()))
+# product_upc: 1111009477, 2066200530,  4116709428, 7218063979, 88491212971
+# store: 15TH & MADISON, VANDALIA, MIDDLETOWN, CROWLEY, HYDE PAR, SOUTHLAKE
