@@ -1,2 +1,6 @@
-.dunnhumby _Breakfast-at-the-Frat
+.dunnhumby _Breakfast-at-the-Frat/
+.idea/
+venv/
+__pycache__/
+.ipynb_checkpoints/
 
