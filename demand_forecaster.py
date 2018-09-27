@@ -12,7 +12,7 @@ from keras.layers import Dense, LSTM
 from keras.callbacks import EarlyStopping
 
 
-class Forecaster:
+class DemandForecaster:
 
     def __init__(self, path):
         self.path = path
@@ -31,7 +31,7 @@ class Forecaster:
         df = df.dropna(axis=0)
         return df
 
-    def recommend_price(self, data):
+    def forecast_demand(self, data):
         product_upc = int(input('enter a product UPC code... '))
         store = input('enter a store name... ').upper()
 
@@ -41,9 +41,9 @@ class Forecaster:
 
         train_set, test_set, train_labels, test_labels = self._split_data_on_train_test_set(samples, labels, 80)
 
-        scaler_dict, encoded_train_set = self._encode_train_set(train_set)
+        scaler_dict, encoded_train_cat_columns, encoded_train_set = self._encode_train_set(train_set)
 
-        encoded_test_set = self._encode_test_set(test_set, scaler_dict)
+        encoded_test_set = self._encode_test_set(test_set, scaler_dict, encoded_train_cat_columns)
 
         X_train = self._reshape_data(encoded_train_set)
         X_test = self._reshape_data(encoded_test_set)
@@ -60,11 +60,14 @@ class Forecaster:
                                  verbose=2,
                                  shuffle=False)
 
-        # last_data_in_product_history = train_data.loc[train_data.index[-2:].values]
-        # encoded_history = self._encode_test_set(last_data_in_product_history, scaler_dict)
-        # encoded_history = self._reshape_data(encoded_history)
-        # prediction_for_data = self._predict_labels(lstm_model, encoded_history)
-        return history
+        predicted_labels = self._predict_labels(lstm_model, X_test)
+        print('Metrics of LSTM NN: {}'.format(self._calculate_metrics(test_labels, predicted_labels)))
+
+        last_data_in_product_history = product_history_in_store.loc[[product_history_in_store.index[-1]]]
+        encoded_history = self._encode_test_set(last_data_in_product_history, scaler_dict, encoded_train_cat_columns)
+        encoded_history = self._reshape_data(encoded_history)
+        forecasted_demand = self._predict_labels(lstm_model, encoded_history)
+        return product_history_in_store, forecasted_demand
 
     def _prepare_product_data(self, data, product_upc, store_name):
         history = data[(data.UPC == product_upc) & (data.STORE_NAME == store_name)]
@@ -94,6 +97,7 @@ class Forecaster:
                                                                   'ADDRESS_STATE_PROV_CODE',
                                                                   'MSA_CODE',
                                                                   'SEG_VALUE_NAME'])
+        encoded_train_cat_columns = encoded_cat_columns.columns
         scaler_dict, scaled_num_columns = self._scale_num_column(train_set,
                                                                        ['SALES_AREA_SIZE_NUM',
                                                                         'AVG_WEEKLY_BASKETS',
@@ -104,13 +108,25 @@ class Forecaster:
                                                                         'SPEND'])
         encoded_train_set = encoded_cat_columns.join(scaled_num_columns, how='right')
         encoded_train_set = encoded_train_set.join(train_set[['FEATURE', 'DISPLAY', 'TPR_ONLY']], how='right')
-        return scaler_dict, encoded_train_set
+        return scaler_dict, encoded_train_cat_columns, encoded_train_set
 
-    def _encode_test_set(self, test_set, scaler_dict):
-        encoded_cat_columns = self._encode_cat_column(test_set, ['ADDRESS_CITY_NAME',
-                                                                        'ADDRESS_STATE_PROV_CODE',
-                                                                        'MSA_CODE',
-                                                                        'SEG_VALUE_NAME'])
+    def _encode_test_set(self, test_set, scaler_dict, encoded_col_name):
+        # encoded_cat_columns = self._encode_cat_column(test_set, ['ADDRESS_CITY_NAME',
+        #                                                         'ADDRESS_STATE_PROV_CODE',
+        #                                                         'MSA_CODE',
+        #                                                         'SEG_VALUE_NAME'])
+        encoded_cat_columns = pd.DataFrame(index=test_set.index, columns=encoded_col_name)
+        for col in encoded_col_name:
+            old_col, uniq = '_'.join(col.split('_')[:-1]), col.split('_')[-1]
+            if old_col in ['ADDRESS_CITY_NAME', 'ADDRESS_STATE_PROV_CODE', 'MSA_CODE', 'SEG_VALUE_NAME']:
+                for i in encoded_cat_columns.index:
+                    if str(test_set.loc[i, old_col]) == str(uniq):
+                        encoded_cat_columns.loc[i, col] = 1
+                    else:
+                        encoded_cat_columns.loc[i, col] = 0
+            else:
+                encoded_cat_columns[col] = [0 for i in range(0, len(encoded_cat_columns.index))]
+
         scaled_num_columns = pd.DataFrame()
         for column in ['SALES_AREA_SIZE_NUM',
                        'AVG_WEEKLY_BASKETS',
